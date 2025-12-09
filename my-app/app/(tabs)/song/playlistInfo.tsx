@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { View, Text, Image, StyleSheet, FlatList, TouchableOpacity, ScrollView, Alert, Modal, TextInput } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@/context/ThemeContext";
@@ -45,6 +45,16 @@ export default function PlaylistInfoScreen() {
   const [loading, setLoading] = useState(true);
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredSongs = useMemo(() => {
+    if (!searchQuery) return songs;
+    const lowerQuery = searchQuery.toLowerCase();
+    return songs.filter(song => 
+      song.track_name.toLowerCase().includes(lowerQuery) ||
+      song.track_artist.toLowerCase().includes(lowerQuery)
+    );
+  }, [songs, searchQuery]);
 
   const fetchPlaylistData = async () => {
     if (!id) return;
@@ -319,18 +329,35 @@ export default function PlaylistInfoScreen() {
           {/* Separador */}
           <View style={[styles.separator, { backgroundColor: theme.colors.primary + '33' }]} />
 
+          {/* Barra de Busca */}
+          <View style={[styles.searchContainer, { backgroundColor: theme.colors.box, borderColor: theme.colors.border }]}>
+            <Ionicons name="search" size={20} color={theme.colors.muted} style={styles.searchIcon} />
+            <TextInput
+              style={[styles.searchInput, { color: theme.colors.text }]}
+              placeholder="Buscar na playlist..."
+              placeholderTextColor={theme.colors.muted}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <Ionicons name="close-circle" size={20} color={theme.colors.muted} />
+              </TouchableOpacity>
+            )}
+          </View>
+
           {/* Seção de músicas */}
           <View style={styles.songsSection}>
             <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>
-              Músicas ({songs.length})
+              Músicas ({filteredSongs.length})
             </Text>
 
-            {songs.length === 0 ? (
+            {filteredSongs.length === 0 ? (
               <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
-                Nenhuma música adicionada ainda.
+                {searchQuery ? "Nenhuma música encontrada." : "Nenhuma música adicionada ainda."}
               </Text>
             ) : (
-              songs.map((song) => (
+              filteredSongs.map((song) => (
                 <View 
                   key={song.id}
                   style={[styles.songItem, { borderBottomColor: theme.colors.border + '20' }]}
@@ -705,6 +732,25 @@ const styles = StyleSheet.create({
   drawerButtonText: {
     fontSize: 16,
     fontFamily: 'SansationBold',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 20,
+    marginBottom: 20,
+    paddingHorizontal: 12,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    fontFamily: 'Sansation',
+    height: '100%',
   },
 });
 

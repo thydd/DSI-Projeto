@@ -21,24 +21,52 @@ export default function AddToPlaylistModal({ visible, onClose, track, onAdded }:
   const [playlists, setPlaylists] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [addingId, setAddingId] = useState<string | null>(null);
+  const [addedPlaylists, setAddedPlaylists] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!visible) return;
+    setAddedPlaylists(new Set()); // Reset added state when opening
     let mounted = true;
     (async () => {
       if (!user) return;
       setLoading(true);
-      const { data, error } = await supabase
+      
+      // 1. Buscar playlists do usuário
+      const { data: playlistsData, error: playlistsError } = await supabase
         .from('playlists')
         .select('id, name, image_url')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
-      if (error) console.error('fetch playlists for modal', error);
-      if (mounted) setPlaylists(data ?? []);
+      
+      if (playlistsError) {
+        console.error('fetch playlists for modal', playlistsError);
+        setLoading(false);
+        return;
+      }
+
+      // 2. Se tiver playlists e uma música selecionada, verificar em quais ela já está
+      if (playlistsData && playlistsData.length > 0 && track?.track_id) {
+        const playlistIds = playlistsData.map(p => p.id);
+        
+        const { data: existingData, error: existingError } = await supabase
+          .from('playlist_tracks')
+          .select('playlist_id')
+          .eq('track_id', track.track_id)
+          .in('playlist_id', playlistIds);
+
+        if (existingError) {
+          console.error('check existing tracks', existingError);
+        } else if (existingData) {
+          const existingSet = new Set(existingData.map(item => item.playlist_id));
+          if (mounted) setAddedPlaylists(existingSet);
+        }
+      }
+
+      if (mounted) setPlaylists(playlistsData ?? []);
       setLoading(false);
     })();
     return () => { mounted = false; };
-  }, [visible, user]);
+  }, [visible, user, track]);
 
   const addToPlaylist = async (playlistId: string, playlistName: string) => {
     if (!track) {
@@ -46,14 +74,15 @@ export default function AddToPlaylistModal({ visible, onClose, track, onAdded }:
       return;
     }
     
+    if (addedPlaylists.has(playlistId)) return;
+
     setAddingId(playlistId);
     try {
       const result = await addTrackToPlaylist(playlistId, track.track_id);
       
       if (result.success) {
-        Alert.alert('Sucesso', `Música adicionada à playlist "${playlistName}"!`);
+        setAddedPlaylists(prev => new Set(prev).add(playlistId));
         onAdded?.();
-        onClose();
       } else {
         Alert.alert('Aviso', result.message || 'Não foi possível adicionar a música');
       }
@@ -140,6 +169,8 @@ export default function AddToPlaylistModal({ visible, onClose, track, onAdded }:
                       </View>
                       {addingId === item.id ? (
                         <ActivityIndicator size="small" color={theme.colors.primary} />
+                      ) : addedPlaylists.has(item.id) ? (
+                        <Ionicons name="checkmark-circle" size={28} color={theme.colors.primary} />
                       ) : (
                         <Ionicons name="add-circle" size={28} color={theme.colors.primary} />
                       )}
