@@ -1,65 +1,15 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTheme } from '@/context/ThemeContext';
-import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { useFriends } from '@/hooks/useFriends';
-import { FriendsList } from '@/components/ui/FriendsList';
-import { AddFriendModal } from '@/components/ui/AddFriendModal';
 import { BottomNav } from '@/components/navigation/BottomNav';
+import { AddFriendModal } from '@/components/ui/AddFriendModal';
+import { FriendRequestsList } from '@/components/ui/FriendRequestsList';
+import { FriendsList } from '@/components/ui/FriendsList';
 import { BOTTOM_NAV_ICONS } from '@/constants/navigation';
-import { useNotifications } from '@/context/NotificationsContext';
-import { NOTIFICATION_SECTION_LABELS } from '@/constants/notifications';
-import { partitionNotifications } from '@/utils/notifications';
-import type { Notification } from '@/types/notifications';
-
-type FriendRequestCardProps = {
-  request: Notification;
-};
-
-function FriendRequestCard({ request }: FriendRequestCardProps) {
-  const theme = useTheme();
-  const firstLetter = request.title.charAt(0).toUpperCase();
-
-  return (
-    <View
-      style={[
-        styles.notificationCard,
-        {
-          backgroundColor: theme.colors.card,
-          borderColor: theme.colors.primary,
-          shadowColor: theme.colors.primary + "20",
-        },
-      ]}
-    >
-      <View
-        style={[
-          styles.avatar,
-          { borderColor: theme.colors.primary, backgroundColor: theme.colors.background },
-        ]}
-      >
-        <Text style={[styles.avatarText, { color: theme.colors.primary }]}>{firstLetter}</Text>
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={[styles.userName, { color: theme.colors.text }]}>{request.title}</Text>
-        {request.message ? (
-          <Text style={[styles.message, { color: theme.colors.muted }]} numberOfLines={2}>
-            {request.message}
-          </Text>
-        ) : null}
-      </View>
-      <View style={styles.actions}>
-        <TouchableOpacity style={styles.actionButton} activeOpacity={0.8}>
-          <Ionicons name="checkmark-outline" size={26} color={theme.colors.primary} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actionButton} activeOpacity={0.8}>
-          <Ionicons name="close-outline" size={26} color={theme.colors.primary} />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
+import { useTheme } from '@/context/ThemeContext';
+import { useFriends } from '@/hooks/useFriends';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import React, { useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function FriendsScreen() {
   const theme = useTheme();
@@ -68,18 +18,21 @@ export default function FriendsScreen() {
 
   const {
     friends,
+    receivedRequests,
     sendFriendRequest,
+    acceptFriendRequest,
+    rejectFriendRequest,
     removeFriend,
+    updateFriendshipStatus,
+    loading,
   } = useFriends();
 
-  const { notifications } = useNotifications();
-  const { friendRequests } = partitionNotifications(notifications);
-  const hasFriendRequests = friendRequests.length > 0;
+  const hasFriendRequests = receivedRequests.length > 0;
 
   const handleSendRequest = async (receiverId: string, message: string) => {
     try {
       await sendFriendRequest(receiverId, message);
-      Alert.alert('Sucesso', 'Pedido de amizade enviado!');
+      
     } catch (error: any) {
       Alert.alert('Erro', error.message || 'Não foi possível enviar o pedido.');
     }
@@ -88,9 +41,46 @@ export default function FriendsScreen() {
   const handleRemoveFriend = async (friendId: string, friendName: string) => {
     try {
       await removeFriend(friendId);
-      Alert.alert('Sucesso', `${friendName} foi removido da sua lista de amigos.`);
     } catch (error: any) {
       Alert.alert('Erro', error.message || 'Não foi possível remover o amigo.');
+    }
+  };
+
+  const handleAcceptRequest = async (requestId: string) => {
+    try {
+      await acceptFriendRequest(requestId);
+
+    } catch (error: any) {
+      Alert.alert('Erro', error.message || 'Não foi possível aceitar o pedido.');
+    }
+  };
+
+  const handleAcceptRequestWithStatus = async (requestId: string, senderId: string, status: any) => {
+    try {
+      await acceptFriendRequest(requestId);
+      // Após aceitar, atualiza o status
+      await updateFriendshipStatus(senderId, status);
+      Alert.alert('Sucesso', `Pedido aceito e amigo marcado como ${status === 'close' ? 'melhor amigo' : status === 'blocked' ? 'bloqueado' : 'amigo comum'}!`);
+    } catch (error: any) {
+      Alert.alert('Erro', error.message || 'Não foi possível aceitar o pedido.');
+    }
+  };
+
+  const handleRejectRequest = async (requestId: string) => {
+    try {
+      await rejectFriendRequest(requestId);
+      Alert.alert('Pedido rejeitado', 'O pedido foi recusado.');
+    } catch (error: any) {
+      Alert.alert('Erro', error.message || 'Não foi possível rejeitar o pedido.');
+    }
+  };
+
+  const handleStatusChange = async (friendId: string, status: any) => {
+    try {
+      await updateFriendshipStatus(friendId, status);
+      Alert.alert('Status atualizado', 'O status da amizade foi alterado com sucesso.');
+    } catch (error: any) {
+      Alert.alert('Erro', error.message || 'Não foi possível atualizar o status.');
     }
   };
 
@@ -121,17 +111,15 @@ export default function FriendsScreen() {
         {/* Friend Requests Section */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>
-            {NOTIFICATION_SECTION_LABELS.FRIEND_REQUESTS}
+            Pedidos de Amizade
           </Text>
-          {hasFriendRequests ? (
-            friendRequests.map((request) => (
-              <FriendRequestCard key={request.id} request={request} />
-            ))
-          ) : (
-            <Text style={[styles.emptyMessage, { color: theme.colors.muted }]}>
-              Nenhum pedido de amizade por enquanto.
-            </Text>
-          )}
+          <FriendRequestsList
+            requests={receivedRequests}
+            onAccept={handleAcceptRequest}
+            onReject={handleRejectRequest}
+            onAcceptWithStatus={handleAcceptRequestWithStatus}
+            loading={loading}
+          />
         </View>
 
         {/* Friends List Section */}
@@ -146,6 +134,7 @@ export default function FriendsScreen() {
               // Navegar para perfil do amigo (implementar depois)
               console.log('Ver perfil de:', friend.name);
             }}
+            onStatusChange={handleStatusChange}
           />
         </View>
       </ScrollView>
@@ -205,48 +194,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'SansationBold',
     opacity: 0.8,
-  },
-  notificationCard: {
-    flexDirection: 'row',
-    borderWidth: 1,
-    borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    marginHorizontal: 20,
-    marginBottom: 16,
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
-  },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 16,
-  },
-  avatarText: {
-    fontSize: 18,
-    fontFamily: 'SansationBold',
-  },
-  userName: {
-    fontSize: 16,
-    fontFamily: 'SansationBold',
-  },
-  message: {
-    marginTop: 6,
-    fontSize: 13,
-    fontFamily: 'SansationBold',
-  },
-  actions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginLeft: 12,
-  },
-  actionButton: {
-    marginLeft: 12,
   },
 });

@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import FriendService from '@/services/friends';
-import type { FriendRequest, FriendWithProfile } from '@/types/friends';
+import type { FriendRequest, FriendWithProfile, FriendshipStatus } from '@/types/friends';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
  * Hook customizado para gerenciar amigos e pedidos de amizade
@@ -156,6 +156,9 @@ export function useFriends() {
 
     // Remove da lista de amigos
     setFriends(prev => prev.filter(friend => friend.id !== friendId));
+    
+    // Invalida o cache para forçar recarregamento na próxima vez
+    lastLoadTime.current = 0;
   }, [user?.id]);
 
   /**
@@ -174,12 +177,50 @@ export function useFriends() {
     return await FriendService.checkIfFriends(user.id, friendId);
   }, [user?.id]);
 
-  // Carrega dados ao montar (apenas amigos, não pedidos)
+  /**
+   * Atualiza o status da amizade
+   */
+  const updateFriendshipStatus = useCallback(async (friendId: string, status: FriendshipStatus) => {
+    if (!user?.id) throw new Error('Usuário não autenticado');
+
+    await FriendService.updateFriendshipStatus(user.id, friendId, status);
+    
+    // Atualiza o estado local
+    setFriends(prevFriends => 
+      prevFriends.map(friend => 
+        friend.id === friendId 
+          ? { ...friend, friendship_status: status }
+          : friend
+      )
+    );
+
+    // Invalida o cache para forçar recarregamento na próxima vez
+    lastLoadTime.current = 0;
+  }, [user?.id]);
+
+  /**
+   * Obtém o status da amizade
+   */
+  const getFriendshipStatus = useCallback(async (friendId: string): Promise<FriendshipStatus> => {
+    if (!user?.id) return 'normal';
+    return await FriendService.getFriendshipStatus(user.id, friendId);
+  }, [user?.id]);
+
+  /**
+   * Obtém amigos por status
+   */
+  const getFriendsByStatus = useCallback(async (status: FriendshipStatus): Promise<FriendWithProfile[]> => {
+    if (!user?.id) return [];
+    return await FriendService.getFriendsByStatus(user.id, status);
+  }, [user?.id]);
+
+  // Carrega dados ao montar (amigos e pedidos recebidos)
   useEffect(() => {
     if (user?.id) {
       loadFriendsData();
+      loadReceivedRequests();
     }
-  }, [user?.id]);
+  }, [user?.id, loadFriendsData, loadReceivedRequests]);
 
   return {
     // Estado
@@ -198,6 +239,9 @@ export function useFriends() {
     removeFriend,
     searchUsers,
     checkIfFriends,
+    updateFriendshipStatus,
+    getFriendshipStatus,
+    getFriendsByStatus,
     
     // Recarregar (com opção de force refresh)
     refresh: (force = false) => loadFriendsData(force),

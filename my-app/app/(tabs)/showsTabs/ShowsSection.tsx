@@ -1,30 +1,25 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
+import React, { useEffect, useMemo, useState } from "react";
+import { Alert, StyleSheet, Text, View } from "react-native";
 
 import { CustomButton } from "@/components/ui/CustomButton";
 import { EventFormModal, EventFormValues } from "@/components/ui/EventFormModal";
 import { FiltersDrawer } from "@/components/ui/FiltersDrawer";
 import { SearchDrawer } from "@/components/ui/SearchDrawer";
-import { EVENT_GENRES } from "@/constants/events";
 import { useAuth } from "@/context/AuthContext";
 import { useShows } from "@/context/ShowsContext";
 import { useTheme } from "@/context/ThemeContext";
 import type { ShowEvent, ShowEventCreateInput, ShowEventUpdateInput } from "@/types/shows";
-import { formatEventDateRange } from "@/utils/shows";
 import { ShowsList } from "./ShowsList";
 import { ShowsMap } from "./ShowsMap";
 
 const DEFAULT_TITLE = "Mapa de Shows";
 const DEFAULT_SUBTITLE =
   "Visualize os pontos que os artistas estão planejando para novas apresentações.";
-const DEFAULT_DETAIL_NOTE =
-  "Este é um protótipo visual. Informações reais serão adicionadas pelos artistas em breve.";
 
 type ShowsSectionProps = {
   title?: string;
   subtitle?: string;
-  detailNote?: string;
 };
 
 type EventDraftInput = Omit<ShowEventCreateInput, "promoterId" | "promoterName">;
@@ -32,7 +27,6 @@ type EventDraftInput = Omit<ShowEventCreateInput, "promoterId" | "promoterName">
 export function ShowsSection({
   title = DEFAULT_TITLE,
   subtitle = DEFAULT_SUBTITLE,
-  detailNote = DEFAULT_DETAIL_NOTE,
 }: ShowsSectionProps) {
   const theme = useTheme();
   const { user } = useAuth();
@@ -72,11 +66,6 @@ export function ShowsSection({
     });
   }, [filteredEvents]);
 
-  const selectedEvent = useMemo(
-    () => filteredEvents.find((event) => event.id === selectedId) ?? null,
-    [filteredEvents, selectedId]
-  );
-
   const promoterId = useMemo(() => {
     if (!user) return null;
     return user.id ?? user.uid ?? user.user?.id ?? null;
@@ -112,10 +101,15 @@ export function ShowsSection({
       const created = await createEvent(payload);
       if (__DEV__) {
         console.log("[ShowsSection] Evento criado:", created);
+        console.log("[ShowsSection] Ativando filtro 'Meus Eventos'");
       }
       setModalMode(null);
+      
+      // Forçar refresh e ativar filtro para mostrar eventos do usuário
+      await refresh({ silent: true });
+      updateFilters({ showOnlyMine: true });
+      
       setSelectedId(created.id);
-      // Evento criado com sucesso - feedback visual já está presente
     } catch (err) {
       if (__DEV__) {
         console.error("[ShowsSection] Erro ao criar evento:", err);
@@ -185,14 +179,6 @@ export function ShowsSection({
       ]
     );
   };
-
-  const footnote = useMemo(() => {
-    const parts: string[] = [];
-    if (detailNote) parts.push(detailNote);
-    if (source === "fallback") parts.push("Dados exibidos a partir do protótipo local.");
-    if (error) parts.push(`(${error})`);
-    return parts.join(" ");
-  }, [detailNote, source, error]);
 
   const isModalVisible = modalMode !== null;
 
@@ -286,9 +272,9 @@ export function ShowsSection({
         </View>
       ) : null}
 
-      {eventsToDisplay.length ? (
+      {filteredEvents.length ? (
         <ShowsList
-          data={eventsToDisplay}
+          data={filteredEvents}
           activeId={selectedId}
           onSelect={setSelectedId}
           onEdit={(event) => {
@@ -298,73 +284,6 @@ export function ShowsSection({
           onDelete={handleDelete}
           canManage={canManage}
         />
-      ) : null}
-
-      {selectedEvent ? (
-        <View
-          style={[styles.detailsCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.primary }]}
-        >
-          <View style={styles.detailsHeader}>
-            <Text style={[styles.detailsTitle, { color: theme.colors.primary }]}>
-              {selectedEvent.title}
-            </Text>
-            <Text style={[styles.detailsPromoter, { color: theme.colors.muted }]}> 
-              por {selectedEvent.promoterName}
-            </Text>
-          </View>
-          <Text style={[styles.detailsText, { color: theme.colors.text }]}> 
-            {selectedEvent.locationName}
-          </Text>
-          <Text style={[styles.detailsText, { color: theme.colors.muted }]}> 
-            {selectedEvent.city}
-            {selectedEvent.state ? `, ${selectedEvent.state}` : ""}
-          </Text>
-          <Text style={[styles.detailsDate, { color: theme.colors.primary }]}> 
-            {formatEventDateRange(selectedEvent.startsAt, selectedEvent.endsAt)}
-          </Text>
-          <Text style={[styles.detailsGenre, { color: theme.colors.text }]}> 
-            {selectedEvent.genres
-              .map((genre) => EVENT_GENRES.find((option) => option.value === genre)?.label ?? genre)
-              .join(" • ")}
-          </Text>
-          {selectedEvent.description ? (
-            <Text style={[styles.detailsDescription, { color: theme.colors.text }]}> 
-              {selectedEvent.description}
-            </Text>
-          ) : null}
-          {selectedEvent.ticketsUrl ? (
-            <Text style={[styles.detailsExtra, { color: theme.colors.primary }]}> 
-              Ingressos: {selectedEvent.ticketsUrl}
-            </Text>
-          ) : null}
-          {footnote ? (
-            <Text style={[styles.detailsFootnote, { color: theme.colors.muted }]}>{footnote}</Text>
-          ) : null}
-          {canManage(selectedEvent) ? (
-            <View style={styles.detailsActions}>
-              <CustomButton
-                title="Editar"
-                onPress={() => {
-                  setEditingEvent(selectedEvent);
-                  setModalMode("edit");
-                }}
-                width={120}
-                height={40}
-                backgroundColor={theme.colors.primary}
-                textColor="#FFFFFF"
-              />
-              <CustomButton
-                title="Excluir"
-                onPress={() => handleDelete(selectedEvent)}
-                width={120}
-                height={40}
-                backgroundColor={theme.colors.card}
-                textColor={theme.colors.error}
-                style={{ borderWidth: 1, borderColor: theme.colors.error }}
-              />
-            </View>
-          ) : null}
-        </View>
       ) : null}
 
       <EventFormModal
@@ -480,58 +399,6 @@ const styles = StyleSheet.create({
   sectionHint: {
     fontFamily: "Sansation",
     fontSize: 14,
-  },
-  detailsCard: {
-    marginHorizontal: 24,
-    marginTop: 24,
-    padding: 20,
-    borderRadius: 18,
-    borderWidth: 2,
-    gap: 10,
-  },
-  detailsHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  detailsTitle: {
-    fontFamily: "SansationBold",
-    fontSize: 20,
-  },
-  detailsPromoter: {
-    fontFamily: "Sansation",
-    fontSize: 14,
-  },
-  detailsText: {
-    fontFamily: "Sansation",
-    fontSize: 16,
-  },
-  detailsDate: {
-    fontFamily: "SansationBold",
-    fontSize: 16,
-  },
-  detailsGenre: {
-    fontFamily: "Sansation",
-    fontSize: 14,
-  },
-  detailsDescription: {
-    fontFamily: "Sansation",
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  detailsExtra: {
-    fontFamily: "Sansation",
-    fontSize: 13,
-  },
-  detailsFootnote: {
-    fontFamily: "Sansation",
-    fontSize: 12,
-    marginTop: 4,
-  },
-  detailsActions: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 12,
   },
 });
 

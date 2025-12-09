@@ -1,11 +1,11 @@
 import React from "react";
-import { View, ScrollView } from "react-native";
+import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { useTheme } from "@/context/ThemeContext";
 import { BottomNav } from "@/components/navigation/BottomNav";
-import { ShowsSection } from "./showsTabs/ShowsSection";
 import { BOTTOM_NAV_ICONS } from '@/constants/navigation';
+import { useTheme } from "@/context/ThemeContext";
+import { ShowsSection } from "./showsTabs/ShowsSection";
 
 export default function ShowsScreen() {
   const theme = useTheme();
@@ -17,7 +17,7 @@ export default function ShowsScreen() {
           contentContainerStyle={{ paddingBottom: 180 }}
           showsVerticalScrollIndicator={false}
         >
-          <ShowsSection detailNote="Este é um protótipo visual. Informações reais serão adicionadas pelos artistas em breve." />
+          <ShowsSection />
         </ScrollView>
 
         <BottomNav tabs={BOTTOM_NAV_ICONS as any} />

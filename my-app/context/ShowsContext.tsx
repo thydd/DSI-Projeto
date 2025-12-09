@@ -7,8 +7,8 @@ import React, {
   useState,
 } from "react";
 
-import { useAuth } from "@/context/AuthContext";
 import { UPCOMING_SHOWS } from "@/constants/shows";
+import { useAuth } from "@/context/AuthContext";
 import {
   createEvent as createEventService,
   deleteEvent as deleteEventService,
@@ -139,8 +139,14 @@ export function ShowsProvider({ children }: { children: React.ReactNode }) {
         });
         if (__DEV__) {
           console.log("[ShowsContext] Eventos carregados:", remoteEvents.length);
+          console.log("[ShowsContext] promoterId do usuário logado:", promoterId);
           if (remoteEvents.length > 0) {
             console.log("[ShowsContext] Primeiro evento:", remoteEvents[0]);
+            console.log("[ShowsContext] promoterIds de todos os eventos:", remoteEvents.map(e => ({
+              title: e.title,
+              promoterId: e.promoterId,
+              match: e.promoterId === promoterId
+            })));
           }
         }
         setEvents(remoteEvents);
@@ -215,6 +221,11 @@ export function ShowsProvider({ children }: { children: React.ReactNode }) {
         throw new Error("É preciso estar autenticado para criar um evento.");
       }
 
+      if (__DEV__) {
+        console.log("[ShowsContext] createEvent - promoterId:", promoterId, "tipo:", typeof promoterId);
+        console.log("[ShowsContext] createEvent - promoterName:", promoterName);
+      }
+
       setStatus("loading");
 
       try {
@@ -225,6 +236,13 @@ export function ShowsProvider({ children }: { children: React.ReactNode }) {
           promoterAvatarUrl: promoterAvatarUrl ?? undefined,
           promoterContact: promoterContact ?? undefined,
         });
+
+        if (__DEV__) {
+          console.log("[ShowsContext] createEvent SUCCESS - evento criado:", created);
+          console.log("[ShowsContext] createEvent SUCCESS - promoterId do evento:", created.promoterId, "tipo:", typeof created.promoterId);
+          console.log("[ShowsContext] createEvent SUCCESS - promoterId do usuário:", promoterId, "tipo:", typeof promoterId);
+          console.log("[ShowsContext] createEvent SUCCESS - IDs são iguais?", created.promoterId === promoterId);
+        }
 
         setEvents((prev) => [created, ...prev]);
         setSource("remote");
@@ -367,10 +385,16 @@ function applyFilters(
     return [];
   }
 
+  if (__DEV__ && filters.showOnlyMine) {
+    console.log("[ShowsContext] applyFilters - Total de eventos:", events.length);
+    console.log("[ShowsContext] applyFilters - promoterId do usuário:", promoterId);
+    console.log("[ShowsContext] applyFilters - Filtro showOnlyMine ativo:", filters.showOnlyMine);
+  }
+
   const normalizedSearch = filters.search.trim().toLowerCase();
   const now = Date.now();
 
-  return events.filter((event) => {
+  const filtered = events.filter((event) => {
     if (!filters.includePast) {
       const endTime = Date.parse(event.endsAt ?? event.startsAt);
       if (!Number.isNaN(endTime) && endTime < now) {
@@ -378,8 +402,17 @@ function applyFilters(
       }
     }
 
-    if (filters.showOnlyMine && promoterId && event.promoterId !== promoterId) {
-      return false;
+    if (filters.showOnlyMine && promoterId) {
+      const match = event.promoterId === promoterId;
+      if (__DEV__) {
+        console.log("[ShowsContext] Filtrando evento:", event.title);
+        console.log("  - promoterId do evento:", event.promoterId, "(tipo:", typeof event.promoterId, ")");
+        console.log("  - promoterId do usuário:", promoterId, "(tipo:", typeof promoterId, ")");
+        console.log("  - Match:", match);
+      }
+      if (!match) {
+        return false;
+      }
     }
 
     if (filters.types.length && !filters.types.includes(event.eventType)) {
@@ -414,4 +447,17 @@ function applyFilters(
 
     return true;
   });
+
+  if (__DEV__ && filters.showOnlyMine) {
+    console.log("[ShowsContext] applyFilters - Eventos após filtro:", filtered.length);
+    if (filtered.length > 0) {
+      console.log("[ShowsContext] applyFilters - Primeiro evento filtrado:", {
+        id: filtered[0].id,
+        title: filtered[0].title,
+        promoterId: filtered[0].promoterId
+      });
+    }
+  }
+
+  return filtered;
 }

@@ -16,7 +16,7 @@ export default function SearchScreen() {
   const theme = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { playlistId, playlistName } = params as { playlistId?: string; playlistName?: string };
+  const { playlistId, playlistName, returnTo } = params as { playlistId?: string; playlistName?: string; returnTo?: string };
   
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -76,8 +76,12 @@ export default function SearchScreen() {
         return;
       }
       
-      // Música adicionada com sucesso - voltar para a playlist
-      router.back();
+      // Música adicionada com sucesso - voltar para a playlist específica
+      if (returnTo === 'playlist') {
+        router.replace(`/(tabs)/song/playlistInfo?id=${targetPlaylistId}` as any);
+      } else {
+        router.back();
+      }
     } catch (error) {
       console.error('Erro ao adicionar música:', error);
       Alert.alert('Erro', 'Ocorreu um erro ao adicionar a música.');

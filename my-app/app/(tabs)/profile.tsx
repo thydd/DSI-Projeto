@@ -1,20 +1,18 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { View, Text, ScrollView, StyleSheet, Image, TouchableOpacity, Alert } from 'react-native';
-import { useTheme } from '@/context/ThemeContext';
-import { useAuth } from '@/context/AuthContext';
-import { HorizontalCarousel } from '@/components/ui/HorizontalCarousel';
 import { BottomNav } from '@/components/navigation/BottomNav';
-import { Ionicons } from '@expo/vector-icons';
+import { HorizontalCarousel } from '@/components/ui/HorizontalCarousel';
 import { UpdateProfileModal } from '@/components/ui/UpdateProfileModal';
-import { CustomButton } from '@/components/ui/CustomButton';
-import { useNotifications } from '@/context/NotificationsContext';
-import { NOTIFICATION_TYPES } from '@/types/notifications';
-import { supabase } from '@/services/supabaseConfig';
-import { updateProfile } from '@/services/profiles';
-import { useRouter, useFocusEffect } from 'expo-router';
 import { DEFAULT_PLAYLIST_COVER_URL } from '@/constants/images';
 import { BOTTOM_NAV_ICONS } from '@/constants/navigation';
+import { useAuth } from '@/context/AuthContext';
+import { useNotifications } from '@/context/NotificationsContext';
+import { useTheme } from '@/context/ThemeContext';
+import { updateProfile } from '@/services/profiles';
+import { supabase } from '@/services/supabaseConfig';
+import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 /*
   Refactored profile screen: small hooks + small components kept in-file
@@ -66,7 +64,7 @@ function useUserPlaylists(user: any) {
   return playlists;
 }
 
-function UserHeader({ name, photo, code, onEdit, onManageFriends }: { name: string; photo: string | null; code?: string | null; onEdit: () => void; onManageFriends: () => void }) {
+function UserHeader({ name, photo, username, onEdit, onManageFriends }: { name: string; photo: string | null; username?: string | null; onEdit: () => void; onManageFriends: () => void }) {
   const theme = useTheme();
   return (
     <View style={styles.header}>
@@ -108,15 +106,17 @@ function UserHeader({ name, photo, code, onEdit, onManageFriends }: { name: stri
       
       <View style={styles.userInfo}>
         <Text style={[styles.name, { color: theme.colors.text }]}>{name}</Text>
-        <View style={[styles.codeBadge, { 
-          borderColor: theme.colors.primary, 
-          backgroundColor: theme.colors.card,
-        }]}>
-          <Ionicons name="key" size={14} color={theme.colors.primary} style={{ marginRight: 6 }} />
-          <Text style={[styles.codeText, { color: theme.colors.primary }]}>
-            {code ?? '#0000000'}
-          </Text>
-        </View>
+        {username && (
+          <View style={[styles.codeBadge, { 
+            borderColor: theme.colors.primary, 
+            backgroundColor: theme.colors.card,
+          }]}>
+            <Ionicons name="at" size={14} color={theme.colors.primary} style={{ marginRight: 6 }} />
+            <Text style={[styles.codeText, { color: theme.colors.primary }]}>
+              {username}
+            </Text>
+          </View>
+        )}
       </View>
     </View>
   );
@@ -157,7 +157,7 @@ function UserPlaylistCard({ item, index, onPress }: { item: any; index: number; 
 
 export default function Profile() {
   const theme = useTheme();
-  const { user, userCode, signOut } = useAuth();
+  const { user, signOut } = useAuth();
   const notifications = useNotifications();
   const router = useRouter();
 
@@ -171,6 +171,7 @@ export default function Profile() {
 
   const displayName = useMemo(() => profileData?.name ?? user?.user_metadata?.name ?? user?.email ?? '', [profileData, user]);
   const avatar = useMemo(() => profileData?.avatar_url ?? null, [profileData]);
+  const username = useMemo(() => profileData?.username ?? null, [profileData]);
 
   // modal states
   const [isEditVisible, setEditVisible] = useState(false);
@@ -248,7 +249,7 @@ export default function Profile() {
           <UserHeader 
             name={displayName} 
             photo={avatar} 
-            code={userCode} 
+            username={username} 
             onEdit={openEdit} 
             onManageFriends={handleManageFriends}
           />

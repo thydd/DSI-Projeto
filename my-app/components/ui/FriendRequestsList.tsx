@@ -1,13 +1,15 @@
-import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, FlatList, ActivityIndicator } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
-import type { FriendRequest } from '@/types/friends';
+import type { FriendRequest, FriendshipStatus } from '@/types/friends';
+import { FriendshipStatusMenu } from './FriendshipStatusMenu';
 
 interface FriendRequestsListProps {
   requests: FriendRequest[];
   onAccept: (requestId: string) => Promise<void>;
   onReject: (requestId: string) => Promise<void>;
+  onAcceptWithStatus?: (requestId: string, senderId: string, status: FriendshipStatus) => Promise<void>;
   loading?: boolean;
 }
 
@@ -15,10 +17,13 @@ export const FriendRequestsList: React.FC<FriendRequestsListProps> = ({
   requests,
   onAccept,
   onReject,
+  onAcceptWithStatus,
   loading = false,
 }) => {
   const theme = useTheme();
   const [processingId, setProcessingId] = React.useState<string | null>(null);
+  const [statusMenuVisible, setStatusMenuVisible] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState<FriendRequest | null>(null);
 
   const handleAccept = async (requestId: string) => {
     setProcessingId(requestId);
@@ -26,6 +31,26 @@ export const FriendRequestsList: React.FC<FriendRequestsListProps> = ({
       await onAccept(requestId);
     } finally {
       setProcessingId(null);
+    }
+  };
+
+  const handleAcceptWithStatus = (request: FriendRequest) => {
+    if (onAcceptWithStatus) {
+      setSelectedRequest(request);
+      setStatusMenuVisible(true);
+    } else {
+      handleAccept(request.id);
+    }
+  };
+
+  const handleStatusChange = async (newStatus: FriendshipStatus) => {
+    if (selectedRequest && onAcceptWithStatus) {
+      setProcessingId(selectedRequest.id);
+      try {
+        await onAcceptWithStatus(selectedRequest.id, selectedRequest.sender_id, newStatus);
+      } finally {
+        setProcessingId(null);
+      }
     }
   };
 
@@ -101,7 +126,7 @@ export const FriendRequestsList: React.FC<FriendRequestsListProps> = ({
           style={[styles.actionButton, styles.acceptButton, { 
             backgroundColor: theme.colors.primary,
           }]}
-          onPress={() => handleAccept(item.id)}
+          onPress={() => handleAcceptWithStatus(item)}
           disabled={processingId === item.id}
           activeOpacity={0.7}
         >
@@ -116,6 +141,9 @@ export const FriendRequestsList: React.FC<FriendRequestsListProps> = ({
               }]}>
                 Aceitar
               </Text>
+              {onAcceptWithStatus && (
+                <Ionicons name="chevron-down" size={16} color="#FFFFFF" style={{ marginLeft: 4 }} />
+              )}
             </>
           )}
         </TouchableOpacity>
@@ -146,20 +174,25 @@ export const FriendRequestsList: React.FC<FriendRequestsListProps> = ({
   }
 
   return (
-    <FlatList
-      data={requests}
-      renderItem={renderItem}
-      keyExtractor={(item) => item.id}
-      contentContainerStyle={styles.listContent}
-      showsVerticalScrollIndicator={false}
-    />
+    <View style={styles.listContent}>
+      {requests.map((item) => renderItem({ item }))}
+      
+      {selectedRequest && (
+        <FriendshipStatusMenu
+          visible={statusMenuVisible}
+          onClose={() => setStatusMenuVisible(false)}
+          currentStatus="normal"
+          friendName={selectedRequest.sender?.name || 'Amigo'}
+          onStatusChange={handleStatusChange}
+        />
+      )}
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   listContent: {
     padding: 16,
-    paddingBottom: 100,
   },
   requestCard: {
     borderRadius: 16,

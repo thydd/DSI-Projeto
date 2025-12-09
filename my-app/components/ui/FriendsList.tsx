@@ -1,21 +1,26 @@
-import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, FlatList, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, Image, TouchableOpacity, Alert } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
-import type { FriendWithProfile } from '@/types/friends';
+import type { FriendWithProfile, FriendshipStatus } from '@/types/friends';
+import { FriendshipStatusMenu } from './FriendshipStatusMenu';
 
 interface FriendsListProps {
   friends: FriendWithProfile[];
   onRemoveFriend?: (friendId: string, friendName: string) => void;
   onFriendPress?: (friend: FriendWithProfile) => void;
+  onStatusChange?: (friendId: string, status: FriendshipStatus) => Promise<void>;
 }
 
 export const FriendsList: React.FC<FriendsListProps> = ({
   friends,
   onRemoveFriend,
   onFriendPress,
+  onStatusChange,
 }) => {
   const theme = useTheme();
+  const [statusMenuVisible, setStatusMenuVisible] = useState(false);
+  const [selectedFriend, setSelectedFriend] = useState<FriendWithProfile | null>(null);
 
   const handleRemove = (friendId: string, friendName: string) => {
     Alert.alert(
@@ -30,6 +35,18 @@ export const FriendsList: React.FC<FriendsListProps> = ({
         },
       ]
     );
+  };
+
+  const handleOpenStatusMenu = (friend: FriendWithProfile, e: any) => {
+    e.stopPropagation();
+    setSelectedFriend(friend);
+    setStatusMenuVisible(true);
+  };
+
+  const handleStatusChange = async (newStatus: FriendshipStatus) => {
+    if (selectedFriend && onStatusChange) {
+      await onStatusChange(selectedFriend.id, newStatus);
+    }
   };
 
   const renderItem = ({ item }: { item: FriendWithProfile }) => (
@@ -69,15 +86,30 @@ export const FriendsList: React.FC<FriendsListProps> = ({
           })}
         </Text>
       </View>
-      {onRemoveFriend && (
-        <TouchableOpacity
-          style={styles.removeButton}
-          onPress={() => handleRemove(item.id, item.name)}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Ionicons name="close-circle" size={24} color={theme.colors.error} />
-        </TouchableOpacity>
-      )}
+      <View style={styles.actions}>
+        {onStatusChange && (
+          <TouchableOpacity
+            style={styles.statusButton}
+            onPress={(e) => handleOpenStatusMenu(item, e)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons 
+              name={item.friendship_status === 'close' ? 'heart' : item.friendship_status === 'blocked' ? 'ban' : 'ellipsis-horizontal'} 
+              size={22} 
+              color={item.friendship_status === 'close' ? '#e74c3c' : theme.colors.primary} 
+            />
+          </TouchableOpacity>
+        )}
+        {onRemoveFriend && (
+          <TouchableOpacity
+            style={styles.removeButton}
+            onPress={() => handleRemove(item.id, item.name)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="close-circle" size={24} color={theme.colors.error} />
+          </TouchableOpacity>
+        )}
+      </View>
     </TouchableOpacity>
   );
 
@@ -102,20 +134,25 @@ export const FriendsList: React.FC<FriendsListProps> = ({
   }
 
   return (
-    <FlatList
-      data={friends}
-      renderItem={renderItem}
-      keyExtractor={(item) => item.id}
-      contentContainerStyle={styles.listContent}
-      showsVerticalScrollIndicator={false}
-    />
+    <View style={styles.listContent}>
+      {friends.map((item) => renderItem({ item }))}
+      
+      {selectedFriend && (
+        <FriendshipStatusMenu
+          visible={statusMenuVisible}
+          onClose={() => setStatusMenuVisible(false)}
+          currentStatus={selectedFriend.friendship_status || 'normal'}
+          friendName={selectedFriend.name}
+          onStatusChange={handleStatusChange}
+        />
+      )}
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   listContent: {
     padding: 16,
-    paddingBottom: 100,
   },
   friendCard: {
     flexDirection: 'row',
@@ -151,6 +188,14 @@ const styles = StyleSheet.create({
   friendshipDate: {
     fontSize: 11,
     marginTop: 2,
+  },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  statusButton: {
+    padding: 4,
   },
   removeButton: {
     padding: 4,

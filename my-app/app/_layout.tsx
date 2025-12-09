@@ -3,12 +3,16 @@ import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
+import { LogBox } from "react-native";
 import { AuthProvider } from "../context/AuthContext";
 import { ThemeProvider } from "../context/ThemeContext";
 import { NotificationsProvider } from "../context/NotificationsContext";
 import { ShowsProvider } from "../context/ShowsContext";
 import { ReportsProvider } from "../context/ReportsContext";
 import { ReviewsProvider } from "../context/ReviewsContext";
+
+// Desabilita warnings do React Native em desenvolvimento
+LogBox.ignoreAllLogs(true);
 
 // Impede que a splash screen feche automaticamente
 SplashScreen.preventAutoHideAsync();

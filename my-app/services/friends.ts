@@ -1,6 +1,5 @@
+import type { FriendRequest, FriendRequestCreateInput, FriendWithProfile, FriendshipStatus } from '@/types/friends';
 import { supabase } from './supabaseConfig';
-import type { FriendRequest, FriendRequestCreateInput, Friend, FriendWithProfile } from '@/types/friends';
-import { generateUserCode } from '@/utils/userCode';
 
 /**
  * Service para gerenciar pedidos de amizade e amigos
@@ -13,28 +12,32 @@ export class FriendService {
    * Envia um pedido de amizade
    */
   static async sendFriendRequest(data: FriendRequestCreateInput): Promise<FriendRequest> {
-    // Verifica se já existe um pedido pendente
+    // Verifica se já são amigos PRIMEIRO (consulta em tempo real)
+    const areFriends = await this.checkIfFriends(data.sender_id, data.receiver_id);
+    if (areFriends) {
+      throw new Error('Vocês já são amigos.');
+    }
+
+    // Verifica se já existe um pedido pendente (ignora rejected/accepted antigos)
     const { data: existing } = await supabase
       .from('friend_requests')
       .select('id, status')
       .eq('sender_id', data.sender_id)
       .eq('receiver_id', data.receiver_id)
+      .eq('status', 'pending')
       .maybeSingle();
 
     if (existing) {
-      if (existing.status === 'pending') {
-        throw new Error('Você já enviou um pedido de amizade para este usuário.');
-      }
-      if (existing.status === 'accepted') {
-        throw new Error('Vocês já são amigos.');
-      }
+      throw new Error('Você já enviou um pedido de amizade para este usuário.');
     }
 
-    // Verifica se já são amigos
-    const areFriends = await this.checkIfFriends(data.sender_id, data.receiver_id);
-    if (areFriends) {
-      throw new Error('Vocês já são amigos.');
-    }
+    // Limpa pedidos antigos (accepted/rejected) para evitar conflitos
+    await supabase
+      .from('friend_requests')
+      .delete()
+      .eq('sender_id', data.sender_id)
+      .eq('receiver_id', data.receiver_id)
+      .in('status', ['accepted', 'rejected']);
 
     const { data: request, error } = await supabase
       .from('friend_requests')
@@ -205,6 +208,72 @@ export class FriendService {
       username: item.friend.username,
       avatar_url: item.friend.avatar_url,
       friendshipDate: item.created_at,
+      friendship_status: item.friendship_status || 'normal',
+    }));
+  }
+
+  /**
+   * Atualiza o status da amizade
+   * @param userId - ID do usuário logado
+   * @param friendId - ID do amigo
+   * @param status - Novo status: 'normal', 'close' ou 'blocked'
+   */
+  static async updateFriendshipStatus(
+    userId: string, 
+    friendId: string, 
+    status: FriendshipStatus
+  ): Promise<void> {
+    // Atualiza o status na relação user -> friend
+    const { error } = await supabase
+      .from('friends')
+      .update({ 
+        friendship_status: status,
+        updated_at: new Date().toISOString()
+      })
+      .eq('user_id', userId)
+      .eq('friend_id', friendId);
+
+    if (error) throw error;
+  }
+
+  /**
+   * Obtém o status da amizade
+   */
+  static async getFriendshipStatus(userId: string, friendId: string): Promise<FriendshipStatus> {
+    const { data, error } = await supabase
+      .from('friends')
+      .select('friendship_status')
+      .eq('user_id', userId)
+      .eq('friend_id', friendId)
+      .maybeSingle();
+
+    if (error) throw error;
+    return (data?.friendship_status as FriendshipStatus) || 'normal';
+  }
+
+  /**
+   * Obtém amigos por status
+   */
+  static async getFriendsByStatus(userId: string, status: FriendshipStatus): Promise<FriendWithProfile[]> {
+    const { data, error } = await supabase
+      .from('friends')
+      .select(`
+        *,
+        friend:profiles!friend_id(id, name, username, avatar_url)
+      `)
+      .eq('user_id', userId)
+      .eq('friendship_status', status)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    return (data || []).map((item: any) => ({
+      id: item.friend.id,
+      name: item.friend.name,
+      username: item.friend.username,
+      avatar_url: item.friend.avatar_url,
+      friendshipDate: item.created_at,
+      friendship_status: item.friendship_status,
     }));
   }
 
@@ -236,45 +305,19 @@ export class FriendService {
   }
 
   /**
-   * Busca usuário por código único (user code)
-   * Gera o código a partir do ID e compara
-   */
-  static async searchUserByCode(code: string, currentUserId: string): Promise<any | null> {
-    if (!code || code.length < 7) return null;
-    
-    // Remove o # se presente
-    const cleanCode = code.replace('#', '').toUpperCase();
-    
-    // Busca todos os usuários exceto o atual
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id, name, username, avatar_url')
-      .neq('id', currentUserId);
-
-    if (error) throw error;
-    if (!data) return null;
-    
-    // Procura o usuário cujo código gerado corresponde ao código buscado
-    for (const user of data) {
-      const userCode = generateUserCode(user.id).replace('#', '').toUpperCase();
-      if (userCode === cleanCode) {
-        return user;
-      }
-    }
-    
-    return null;
-  }
-
-  /**
    * Busca usuários por username (para adicionar amigos)
+   * Busca exata ou parcial pelo username
    */
   static async searchUsersByUsername(query: string, currentUserId: string): Promise<any[]> {
     if (!query || query.length < 2) return [];
 
+    // Remove @ se presente no início
+    const cleanQuery = query.startsWith('@') ? query.substring(1) : query;
+
     const { data, error } = await supabase
       .from('profiles')
       .select('id, name, username, avatar_url')
-      .ilike('username', `%${query}%`)
+      .ilike('username', `%${cleanQuery}%`)
       .neq('id', currentUserId)
       .limit(10);
 

@@ -2,6 +2,8 @@
 
 export type FriendRequestStatus = 'pending' | 'accepted' | 'rejected';
 
+export type FriendshipStatus = 'normal' | 'close' | 'blocked';
+
 export type FriendRequest = {
   id: string;
   sender_id: string;
@@ -35,6 +37,8 @@ export type Friend = {
   user_id: string;
   friend_id: string;
   created_at: string;
+  friendship_status?: FriendshipStatus;
+  updated_at?: string;
   // Dados do amigo populados via join
   friend?: {
     id: string;
@@ -50,4 +54,5 @@ export type FriendWithProfile = {
   username: string;
   avatar_url: string | null;
   friendshipDate: string;
+  friendship_status?: FriendshipStatus;
 };
